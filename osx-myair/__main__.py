@@ -3,6 +3,7 @@ import logging
 import os
 import rumps
 import requests
+import time
 
 
 class MyAirTaskbar(rumps.App):
@@ -64,10 +65,13 @@ class MyAirTaskbar(rumps.App):
         rumps decorator runs this every X seconds (as defined in config.ini)
         """
 
+        #FIXME: Callback on the timer here. Unsure why
+
         if not self.server:
             logger.error("No server has been defined.")
             rumps.alert(title="Configuration Error", message="No host is configured.\nError 01")
 
+        logger.debug("Requesting current system state.")
         target = self.base_target + "getSystemData"
         logger.debug("Built target URL {}".format(target))
         self.current_state = self.send_command(target)
@@ -102,7 +106,7 @@ class MyAirTaskbar(rumps.App):
         Turns aircon on or off. Checks state first.
         """
         logger.debug("Attempting to toggle AC state.")
-        if self.current_state["ac1"]["info"]["state"] == "on":
+        if self.current_state["aircons"]["ac1"]["info"]["state"] == "on":
             logger.debug("Last know state of AC was on.")
             logger.info("Turning AC off.")
             target = self.base_target + 'setAircon?json={"ac1":{"info":{"state":"off"}}}'
@@ -112,18 +116,23 @@ class MyAirTaskbar(rumps.App):
             target = self.base_target + 'setAircon?json={"ac1":{"info":{"state":"on"}}}'
 
         logger.debug("Built target URL {}".format(target))
-        if self.send_command(target):
+        request = self.send_command(target)
+        if request.json()["ack"] == True:
+            logger.debug("Sleeping for 5 seconds before requesting another update.")
+            time.sleep(5)
             self.get_state()
-            if self.current_state["ac1"]["info"]["state"] == "on":
+            if self.current_state["aircons"]["ac1"]["info"]["state"] == "on":
+                logger.debug("AC is currently on.")
                 rumps.notification(title="MyAir", message="AC turned on successfully")
             else:
+                logger.debug("AC is currently off.")
                 rumps.notification(title="MyAir", message="AC turned off successfully")
 
     @rumps.clicked("About")
     def about(self, _):
         rumps.alert(title="About OS X MyAir",
                     message="OS X MyAir Taskbar Application\n"
-                    "Maintained at https://github.com/CameronEx/osx-myair"
+                    "Maintained at https://github.com/CameronEx/osx-myair\n"
                     "Not affiliated with Advantage Air.")
 
 
@@ -136,6 +145,9 @@ ch.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 ch.setFormatter(formatter)
 logger.addHandler(ch)
+
+# rumps debugging
+rumps.debug_mode(True)
 
 if __name__ == "__main__":
     MyAirTaskbar().run()
